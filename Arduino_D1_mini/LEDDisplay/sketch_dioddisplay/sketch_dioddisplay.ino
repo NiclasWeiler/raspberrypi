@@ -5,7 +5,6 @@
 //
 // User can enter text on the serial monitor and this will display as a
 // scrolling message on the display.
-// Speed for the display is controlled by a pot on SPEED_IN analog in.
 
 // PIR detector
 // http://henrysbench.capnfatz.com/henrys-bench/arduino-sensors-and-input/arduino-hc-sr501-motion-sensor-tutorial/
@@ -15,9 +14,25 @@
 
 #include <MD_MAX72xx.h>
 #include <SPI.h>
-#define USE_POT_CONTROL 0
+
+// Added for MQTT by Niclas
+// ****************************************************************
+#include <ESP8266WiFi.h>
+#include <PubSubClient.h>
+
+const char* ssid = "AdamsFamily";
+const char* password =  "karlssonmelvin07";
+
+const char* mqttServer = "weilerhoka.hopto.org";
+const int   mqttPort = 1883;
+const char* mqttUser = "pi";
+const char* mqttPassword = "Willeberry3";
+
+// *****************************************************************
+
 #define PRINT_CALLBACK  0
 #define PRINT(s, v) { Serial.print(F(s)); Serial.print(v); }
+
 
 // Define the number of devices we have in the chain and the hardware interface
 // NOTE: These pin numbers will probably not work with your hardware and may
@@ -26,19 +41,17 @@
 
 #define HARDWARE_TYPE MD_MAX72XX::FC16_HW
 #define MAX_DEVICES 8 // 4
-#define CLK_PIN     D5 // 13  // or SCK  // Blå
-#define DATA_PIN    D7 // 11  // or MOSI // Grå
-#define CS_PIN      D6 // 10  // or SS   // Lila
-#define SUMMER_PIN  D0   // 
-#define PIR_PIN     D1 //D3   //
-#define IR_RECV_PIN D4   //
-#define IR_SEND_PIN D3 //D2   //
-#define TEMP_PIN    D2 // D1   //
+#define CLK_PIN     D5 //   green
+#define DATA_PIN    D7 //   orange
+#define CS_PIN      D6 //   yellow
+                 // VCC 5V, brown
+                 // Ground, red
+//#define SUMMER_PIN  D0
+//#define PIR_PIN     D1
+//#define IR_RECV_PIN D4
+//#define IR_SEND_PIN D3
+//#define TEMP_PIN    D2
 #define HW_RST_PIN  D8   // Currently not taken out in the HW design
-
-//#define CLK_PIN   7  // or SCK  // Brun
-//#define DATA_PIN  5  // or MOSI // Röd
-//#define CS_PIN    4  // or SS   // Orange
 
 // SPI hardware interface
 MD_MAX72XX mx = MD_MAX72XX(HARDWARE_TYPE, CS_PIN, MAX_DEVICES);
@@ -46,12 +59,8 @@ MD_MAX72XX mx = MD_MAX72XX(HARDWARE_TYPE, CS_PIN, MAX_DEVICES);
 //MD_MAX72XX mx = MD_MAX72XX(HARDWARE_TYPE, DATA_PIN, CLK_PIN, CS_PIN, MAX_DEVICES);
 
 // Scrolling parameters
-#if USE_POT_CONTROL
-#define SPEED_IN  A0
-#else
-#define SCROLL_DELAY  75  // in milliseconds
-#endif // USE_POT_CONTROL
 
+#define SCROLL_DELAY  40 //75  // in milliseconds
 #define CHAR_SPACING  1 // pixels between characters
 
 // Global message buffers shared by Serial and Scrolling functions
@@ -62,76 +71,36 @@ bool newMessageAvailable = false;
 
 char changeMessage[BUF_SIZE];
 bool changeMessageAvailable = false;
-int change = 0;
+int change = 1;
+int topicNr = 0;
 
-uint16_t  scrollDelay;  // in milliseconds
+char display_1[BUF_SIZE];
+char display_2[BUF_SIZE];
+char display_3[BUF_SIZE];
 
-/*
-char oldMessage[BUF_SIZE];
-bool presens = false;
-bool rundisplay = false;
+WiFiClient espClient;
+PubSubClient client(espClient);
 
-bool pirState = false;
-*/
-
-/*
-void clearMessages(void)
-{
-
-  // Check if someone is present to continue, or stay in "case 0" until someone shows up
-  if (digitalRead(PIR_PIN) == HIGH) 
-  {
-    presens = true;
-  }
-  else
-  {
-    presens = false;
-  }
-  Serial.print(presens);
-  Serial.print(rundisplay);
-  Serial.print("\n");
-  if ((presens == true) && (rundisplay == false)) 
-  {
-    // start running as someone is there
-    Serial.print("Start --- \n");
-    strcpy(changeMessage, oldMessage);
-    changeMessageAvailable = true;
-    rundisplay = true;
-  }  
-  else {   
-    if ((presens == false) && (rundisplay == true))
-    {
-      // stop running the display and store the old message for waking up
-      Serial.print("--- Stop \n");
-      strcpy(oldMessage, curMessage);
-      //strcpy(changeMessage, "                                                                           ");// 75 blanks
-      strcpy(changeMessage, " ");
-      changeMessageAvailable = true;
-      rundisplay = false;
-    }
-  }
-}
-*/
 void changeMessages(void)
 {
   switch(change)
   {
     case 0:
-      //strcpy(changeMessage, "Join the Ericsson Hackathon - March 28th!     ");
-      strcpy(changeMessage, "Join the Ericsson Hackathon    ");
+      strcpy(changeMessage, display_1);
       changeMessageAvailable = true;
       change++;
       break;
     case 1:  
-      strcpy(changeMessage, "Build your first Internet of Things    ");
+      strcpy(changeMessage, display_2);
       changeMessageAvailable = true;
       change++;
       break;
     case 2:
-      strcpy(changeMessage, "Get your Boat, Greenhouse, Caravan or anything else connected!     ");
+      strcpy(changeMessage, display_3);
       changeMessageAvailable = true;
-      change++;
+      change=0;
       break;
+/*      
     case 3:
       strcpy(changeMessage, "From sensor to data on your phone in 24 hours      ");
       changeMessageAvailable = true;
@@ -142,6 +111,7 @@ void changeMessages(void)
       changeMessageAvailable = true;
       change=0;
       break;
+*/
   }
 }
 
@@ -199,12 +169,10 @@ uint8_t scrollDataSource(uint8_t dev, MD_MAX72XX::transformType_t t)
       if (*p == '\0')
       {
         p = curMessage;     // reset the pointer to start of message
-        // Daniel added motion detection with PIR here
-        // clearMessages();
         if (changeMessageAvailable)  // there is a new message waiting
         {
           strcpy(curMessage, changeMessage);  // copy it in
-          changeMessageAvailable = false;
+          changeMessages();  // update to next message
         }
         if (newMessageAvailable)  // there is a new message waiting
         {
@@ -239,83 +207,162 @@ void scrollText(void)
 {
   static uint32_t                        prevTime = 0;
   // Is it time to scroll the text?
-  if (millis()-prevTime >= scrollDelay)
+  if (millis()-prevTime >= SCROLL_DELAY)
   {
     mx.transform(MD_MAX72XX::TSL);  // scroll along - the callback will load all the data
     prevTime = millis();      // starting point for next time
   }
 }
 
-uint16_t getScrollDelay(void)
-{
-#if USE_POT_CONTROL
-  uint16_t  t;
-  t = analogRead(SPEED_IN);
- //Serial.println(t);
-  t = map(t, 0, 1023, 25, 250);
-  return(t);
-#else
-  return(SCROLL_DELAY);
-#endif
 
+void handleNewMessage(char* topic, byte* payload, unsigned int length)
+// Callback function for subscribed data from MQTT server
+{
+
+  bool emptyString = false;
+  
+  if (String((char)payload[0]) == String(" ")) // If Text starts with space character
+  {                                           // then create an Empty string
+    emptyString = true;
+  }
+
+  if (String(topic) == String("niwe/display_1"))
+  {
+    topicNr = 1;
+  }
+  if (String(topic) == String("niwe/display_2"))
+  {
+    topicNr = 2;
+  }
+  if (String(topic) == String("niwe/display_3"))
+  {
+    topicNr = 3;
+  }
+  
+  switch(topicNr)
+  {
+
+    case 1: // Display 1
+      if (!emptyString)
+      {
+        strcpy(display_1, "1: ");  // Add display number to beginning of string
+        for (int i = 0; i < length ; i++)  // Add string
+        {
+          display_1[i + 3] = (char)payload[i];
+        }
+        display_1[length + 3] = ' ';
+        display_1[length + 4] = '\0';
+      }
+      else
+      {
+        display_1[0] = ' ';
+        display_1[1] = '\0';
+      }
+      break;
+      
+    case 2:  //Display 2
+      if (!emptyString)
+      {
+        strcpy(display_2, "2: ");  // Add display number to beginning of string
+        for (int i = 0; i < length ; i++)  // Add string
+        {
+          display_2[i + 3] = (char)payload[i];
+        }
+        display_2[length + 3] = ' ';
+        display_2[length + 4] = '\0';
+      }
+      else
+      {
+        display_2[0] = ' ';
+        display_2[1] = '\0';
+      }
+      break;
+
+    case 3:  //  Display 3
+      if (!emptyString)
+      {
+        strcpy(display_3, "3: ");  // Add display number to beginning of string
+        for (int i = 0; i < length ; i++)  // Add string
+        {
+          display_3[i + 3] = (char)payload[i];
+        }
+        display_3[length + 3] = ' ';
+        display_3[length + 4] = '\0';
+      }
+      else
+      {
+        display_3[0] = ' ';
+        display_3[1] = '\0';
+      }
+      break;
+
+    default:
+      break;
+  }
 }
 
 void setup()
 {
+  Serial.begin(115200);
+  WiFi.begin(ssid, password);
+
+  while (WiFi.status() != WL_CONNECTED) 
+  {
+    delay(500);
+//    Serial.print("Connecting to WiFi..");
+  }
+  Serial.println("Connected to the WiFi network");
+
+  client.setServer(mqttServer, mqttPort);
+  client.setCallback(handleNewMessage);
+
+  while (!client.connected()) 
+  {
+//    Serial.println("Connecting to MQTT...");
+    if (client.connect("Niclas LED Display 1", mqttUser, mqttPassword )) 
+    {
+      Serial.println("connected");  
+    } 
+    else
+    {
+      Serial.println("failed with state ");
+//      Serial.print(client.state());
+      delay(2000);
+    }
+  }
+ 
+  client.subscribe("niwe/display_1");
+  client.subscribe("niwe/display_2");
+  client.subscribe("niwe/display_3");
+
+  strcpy(display_1, "No messages           ");
+  strcpy(display_2, " ");
+  strcpy(display_3, " ");
+  strcpy(curMessage, display_1);
+  changeMessages(); // Initiate first message
+  newMessage[0] = '\0';
+
   mx.begin();
   mx.setShiftDataInCallback(scrollDataSource);
   mx.setShiftDataOutCallback(scrollDataSink);
-#if USE_POT_CONTROL
-  pinMode(SPEED_IN, INPUT);
-#else
-  scrollDelay = SCROLL_DELAY;
-#endif
-  pinMode(PIR_PIN, INPUT);    // initialize sensor as an input
-//  strcpy(curMessage, "MQTT Display - subscribes to topic edallam/MQTT_Display/text              ");
-  strcpy(curMessage, "Welcome to Ericsson Lund         Enjoy your day here!              ");
-  //strcpy(oldMessage, "                                                                           ");// 75 blanks
-  newMessage[0] = '\0';
-  //Serial.begin(57600);
-  Serial.begin(115200);
-// Serial.print("\n[MD_MAX72XX Message Display]\nType a message for the scrolling display\nEnd message line with a newline\n");
-  Serial.print("End message line with a newline\n");
 
-  // Test the led
-  pinMode(IR_SEND_PIN, OUTPUT);
-  digitalWrite(IR_SEND_PIN,HIGH);
-  delay(200);
-  digitalWrite(IR_SEND_PIN,LOW);
-  delay(200);
-  digitalWrite(IR_SEND_PIN,HIGH);
-  delay(200);
-  digitalWrite(IR_SEND_PIN,LOW);
-  //pinMode(HW_RST_PIN, OUTPUT);
-  //digitalWrite(HW_RST_PIN,HIGH);
+  // Test server
+  // client.publish("niwe/display_1", "Hello from display_1");
+
 }
 int count = 0;
 void loop()
 {
-  scrollDelay = getScrollDelay();
-  changeMessages();
-  //clearMessages();
+//  changeMessages();
+  client.loop();
   readSerial();
   scrollText();
   count++;
   //Serial.println(count);
-  if (count == 10000) {
+  if (count == 10000) 
+  {
     Serial.print("count\n");
     count = 0;
   }
-
-  /*
-  // Check if someone is present to continue, or stay in "case 0" until someone shows up
-  if (digitalRead(PIR_PIN) == LOW)
-  {
-    Serial.println("No one there!");
-  }   
-  else {   
-    scrollText(); 
-  }
-  */
 
 }
