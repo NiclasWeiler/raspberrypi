@@ -1,0 +1,6 @@
+0   4,16        * * *   sudo python /home/pi/Documents/python/pi_use_cases.py getPiTempToFile
+29  17          * * 2   sudo python /home/pi/Documents/python/pi_use_cases.py sendPiTemperatureMessage
+29  17          * * 4   sudo python /home/pi/Documents/python/pi_use_cases.py sendSoundCheckLog
+30  *           * * *   sudo python /home/pi/Documents/python/pi_use_cases.py soundcheck
+1   4,16        * * *   sudo python /home/pi/Documents/python/pi_use_cases.py getTempHumToFile
+29  17          * * 7   sudo python /home/pi/Documents/python/pi_use_cases.py sendTempHumMessage
