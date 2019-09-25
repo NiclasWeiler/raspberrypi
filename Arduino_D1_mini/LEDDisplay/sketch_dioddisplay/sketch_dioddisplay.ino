@@ -23,9 +23,9 @@
 const char* ssid = "XXX";
 const char* password =  "XXX";
 
-const char* mqttServer = "weilerhoka.hopto.org";
-const int   mqttPort = 1883;
-const char* mqttUser = "pi";
+const char* mqttServer = "XXX";
+const int   mqttPort = XXX;
+const char* mqttUser = "XXX";
 const char* mqttPassword = "XXX";
 
 // *****************************************************************
@@ -100,18 +100,6 @@ void changeMessages(void)
       changeMessageAvailable = true;
       change=0;
       break;
-/*      
-    case 3:
-      strcpy(changeMessage, "From sensor to data on your phone in 24 hours      ");
-      changeMessageAvailable = true;
-      change++;
-      break;
-    case 4:
-      strcpy(changeMessage, "Everyone is welcome - You teach what you know and learn from others    ");
-      changeMessageAvailable = true;
-      change=0;
-      break;
-*/
   }
 }
 
@@ -214,102 +202,67 @@ void scrollText(void)
   }
 }
 
-
 void handleNewMessage(char* topic, byte* payload, unsigned int length)
 // Callback function for subscribed data from MQTT server
 {
+  static bool emptyString = false;
+  static char *cp;
+  static char number = 0;
 
-  bool emptyString = false;
-  
-  if (String((char)payload[0]) == String(" ")) // If Text starts with space character
-  {                                           // then create an Empty string
-    emptyString = true;
-  }
-
+// Find out wich string is to be updated.
   if (String(topic) == String("niwe/display_1"))
   {
-    topicNr = 1;
+    cp = display_1;
+    number = '1';
   }
   if (String(topic) == String("niwe/display_2"))
   {
-    topicNr = 2;
+    cp = display_2;
+    number = '2';
   }
   if (String(topic) == String("niwe/display_3"))
   {
-    topicNr = 3;
+    cp = display_3;
+    number = '3';
   }
-  
-  switch(topicNr)
+
+/*  If Text not starts with space character, then copy tring.
+ *  Otherwise copy nothing to create empty string, to shut the display down.
+ */
+  if (!(String((char)payload[0]) == String(" ")))
   {
-
-    case 1: // Display 1
-      if (!emptyString)
-      {
-        strcpy(display_1, "1: ");  // Add display number to beginning of string
-        for (int i = 0; i < length ; i++)  // Add string
-        {
-          display_1[i + 3] = (char)payload[i];
-        }
-        display_1[length + 3] = ' ';
-        display_1[length + 4] = '\0';
-      }
-      else
-      {
-        display_1[0] = ' ';
-        display_1[1] = '\0';
-      }
-      break;
-      
-    case 2:  //Display 2
-      if (!emptyString)
-      {
-        strcpy(display_2, "2: ");  // Add display number to beginning of string
-        for (int i = 0; i < length ; i++)  // Add string
-        {
-          display_2[i + 3] = (char)payload[i];
-        }
-        display_2[length + 3] = ' ';
-        display_2[length + 4] = '\0';
-      }
-      else
-      {
-        display_2[0] = ' ';
-        display_2[1] = '\0';
-      }
-      break;
-
-    case 3:  //  Display 3
-      if (!emptyString)
-      {
-        strcpy(display_3, "3: ");  // Add display number to beginning of string
-        for (int i = 0; i < length ; i++)  // Add string
-        {
-          display_3[i + 3] = (char)payload[i];
-        }
-        display_3[length + 3] = ' ';
-        display_3[length + 4] = '\0';
-      }
-      else
-      {
-        display_3[0] = ' ';
-        display_3[1] = '\0';
-      }
-      break;
-
-    default:
-      break;
+    // Check length of text and cut the lenght, if neccesary
+    if (length > BUF_SIZE-5) // 5 Characters are added below for readability
+    {
+      length = BUF_SIZE-5;
+    }
+    // Add text number and copy text
+    *cp++ = number;
+    *cp++ = char(':');
+    *cp++ = char(' ');
+    for (int i = 0; i < length ; i++)  // Add string
+    {
+      *cp++ = (char)payload[i];
+    }
   }
+  *cp++ = ' ';   // Always end string with a space and Null. Even empty string.
+  *cp++ = '\0';
 }
 
 void setup()
 {
-  Serial.begin(115200);
+  Serial.begin(9600);
+  while (!Serial)
+  {
+    ; // wait for serial port to connect. Needed for native USB port only
+  }
+  
   WiFi.begin(ssid, password);
 
   while (WiFi.status() != WL_CONNECTED) 
   {
     delay(500);
-//    Serial.print("Connecting to WiFi..");
+    Serial.println("Connecting to WiFi..");
   }
   Serial.println("Connected to the WiFi network");
 
@@ -318,7 +271,7 @@ void setup()
 
   while (!client.connected()) 
   {
-//    Serial.println("Connecting to MQTT...");
+    Serial.println("Connecting to MQTT...");
     if (client.connect("Niclas LED Display 1", mqttUser, mqttPassword )) 
     {
       Serial.println("connected");  
@@ -361,8 +314,7 @@ void loop()
   //Serial.println(count);
   if (count == 10000) 
   {
-    Serial.print("count\n");
+//    Serial.print("count\n");
     count = 0;
   }
-
 }
