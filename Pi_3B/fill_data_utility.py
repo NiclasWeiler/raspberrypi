@@ -23,10 +23,13 @@ def getTempHumToFile(filename):
 
   #get humidity temperature
   humidity, temperature = Adafruit_DHT.read_retry(Adafruit_DHT.DHT22, 17)
-
-  if (checkAlarm(temperature, 40, 0)):
-    mail.sendAlarm("Air temperatur Larm !!!!!!!!!!!!!!!!!!!!\n"
-                    + "Air Temp = " + format(temperature, '.1f'), 'noAttach')
+  if (type(1.2) != type(humidity)): # If no values received set values to 999
+    humidity = 999
+    temperature = 999
+  else: # Check if temperature is abnormal
+    if (checkAlarm(temperature, 40, 0)):
+      mail.sendAlarm("Air temperatur Larm !!!!!!!!!!!!!!!!!!!!\n"
+                      + "Air Temp = " + format(temperature, '.1f'), 'noAttach')
 
   # Write data into file
   f = open(filename, 'a')
@@ -80,5 +83,3 @@ def checkAlarm(value,maximum,minimum):
 
 def takePicture(picName):
   subprocess.call(["raspistill", "-o", picName])
-
-
