@@ -81,6 +81,46 @@ char display_3[BUF_SIZE];
 WiFiClient espClient;
 PubSubClient client(espClient);
 
+/* This function check if connected to wifi. If it is not connecte, it ties to connect.
+ * If connection does not work A message is added to the display and loop is stopped.
+ */
+void connectToWiFi(void)
+{
+  int count = 0;
+  while (WiFi.status() != WL_CONNECTED) 
+  {
+    Serial.println(" Not connected to the WiFi network");
+    delay(500);
+    count++;
+    if (count == 20)
+    {
+      strcpy(display_3, "No WiFi \n");
+      break;
+    }
+  }
+  Serial.println("Connected to the WiFi network");
+}
+
+void connectToClient(void)
+{
+  while (!client.connected()) 
+  {
+    Serial.println("Not connected to MQTT...");
+    if (client.connect("Niclas LED Display 1", mqttUser, mqttPassword )) 
+    {
+      Serial.println("connected");  
+    } 
+    else
+    {
+      strcpy(display_3, "No connection to MQTT server \n");
+      Serial.println("failed with state ");
+//      Serial.print(client.state());
+      delay(2000);
+    }
+  }
+  Serial.println("Connected to MQTT server");
+}
+
 void changeMessages(void)
 {
   switch(change)
@@ -258,31 +298,11 @@ void setup()
   }
   
   WiFi.begin(ssid, password);
+  connectToWiFi();
 
-  while (WiFi.status() != WL_CONNECTED) 
-  {
-    delay(500);
-    Serial.println("Connecting to WiFi..");
-  }
-  Serial.println("Connected to the WiFi network");
-
-  client.setServer(mqttServer, mqttPort);
   client.setCallback(handleNewMessage);
-
-  while (!client.connected()) 
-  {
-    Serial.println("Connecting to MQTT...");
-    if (client.connect("Niclas LED Display 1", mqttUser, mqttPassword )) 
-    {
-      Serial.println("connected");  
-    } 
-    else
-    {
-      Serial.println("failed with state ");
-//      Serial.print(client.state());
-      delay(2000);
-    }
-  }
+  client.setServer(mqttServer, mqttPort);
+  connectToClient();
  
   client.subscribe("niwe/display_1");
   client.subscribe("niwe/display_2");
@@ -312,9 +332,14 @@ void loop()
   scrollText();
   count++;
   //Serial.println(count);
-  if (count == 10000) 
+  if (count == 300000) 
   {
 //    Serial.print("count\n");
+    connectToWiFi();
     count = 0;
+  }
+  if (count == 150000)
+  {
+    connectToClient();
   }
 }
