@@ -24,7 +24,7 @@ const char* ssid = "XXX";
 const char* password =  "XXX";
 
 const char* mqttServer = "XXX";
-const int   mqttPort = XXX;
+const int   mqttPort = 999;
 const char* mqttUser = "XXX";
 const char* mqttPassword = "XXX";
 
@@ -66,8 +66,6 @@ MD_MAX72XX mx = MD_MAX72XX(HARDWARE_TYPE, CS_PIN, MAX_DEVICES);
 // Global message buffers shared by Serial and Scrolling functions
 #define BUF_SIZE  75
 char curMessage[BUF_SIZE];
-char newMessage[BUF_SIZE];
-bool newMessageAvailable = false;
 
 char changeMessage[BUF_SIZE];
 bool changeMessageAvailable = false;
@@ -79,6 +77,7 @@ char display_2[BUF_SIZE];
 char display_3[BUF_SIZE];
 
 WiFiClient espClient;
+bool lostWiFi = false;
 PubSubClient client(espClient);
 
 /* This function check if connected to wifi. If it is not connecte, it ties to connect.
@@ -86,39 +85,50 @@ PubSubClient client(espClient);
  */
 void connectToWiFi(void)
 {
-  int count = 0;
-  while (WiFi.status() != WL_CONNECTED) 
+  if (WiFi.status() != WL_CONNECTED) 
   {
+    lostWiFi = true;
     Serial.println(" Not connected to the WiFi network");
-    delay(500);
-    count++;
-    if (count == 20)
+    strcpy(display_2, "2: No WiFi connection \0");
+    WiFi.begin(ssid, password);
+  }
+  else
+  {
+    Serial.println("Connected to the WiFi network");
+    if (lostWiFi)
     {
-      strcpy(display_3, "No WiFi \n");
-      break;
+      strcpy(display_2, "2: WiFi reconnected \0");
+      lostWiFi = false;
     }
   }
-  Serial.println("Connected to the WiFi network");
 }
 
 void connectToClient(void)
 {
-  while (!client.connected()) 
+  if ((!client.connected()) and (WiFi.status() == WL_CONNECTED)) 
   {
     Serial.println("Not connected to MQTT...");
-    if (client.connect("Niclas LED Display 1", mqttUser, mqttPassword )) 
+    strcpy(display_3, "3: No connection to MQTT server \0");
+    if (!client.connect("Niclas LED Display 1", mqttUser, mqttPassword )) 
     {
-      Serial.println("connected");  
-    } 
+      Serial.print("failed with state: ");
+      Serial.println (client.state());
+    }
     else
     {
-      strcpy(display_3, "No connection to MQTT server \n");
-      Serial.println("failed with state ");
-//      Serial.print(client.state());
-      delay(2000);
+      strcpy(display_3, "3: MQTT server reconnected \0");
+      client.subscribe("niwe/display_1");
+      client.subscribe("niwe/display_2");
+      client.subscribe("niwe/display_3");
     }
   }
-  Serial.println("Connected to MQTT server");
+  else
+  {
+    if (client.connected())
+    {
+      Serial.println("Connected to MQTT server");
+    }
+  }
 }
 
 void changeMessages(void)
@@ -140,28 +150,6 @@ void changeMessages(void)
       changeMessageAvailable = true;
       change=0;
       break;
-  }
-}
-
-void readSerial(void)
-{
-  static uint8_t  putIndex = 0;
-  
-  while (Serial.available())
-  {
-    newMessage[putIndex] = (char)Serial.read();
-    if ((newMessage[putIndex] == '\n') || (putIndex >= BUF_SIZE-3)) // end of message character or full buffer
-    {
-      // put in a message separator and end the string
-      newMessage[putIndex++] = ' ';
-      newMessage[putIndex] = '\0';
-      // restart the index for next filling spree and flag we have a message waiting
-      putIndex = 0;
-      newMessageAvailable = true;
-    }
-    else if (newMessage[putIndex] != '\r')
-      // Just save the next char in next location
-      putIndex++;
   }
 }
 
@@ -202,11 +190,6 @@ uint8_t scrollDataSource(uint8_t dev, MD_MAX72XX::transformType_t t)
           strcpy(curMessage, changeMessage);  // copy it in
           changeMessages();  // update to next message
         }
-        if (newMessageAvailable)  // there is a new message waiting
-        {
-          strcpy(curMessage, newMessage);      // copy it in
-          newMessageAvailable = false;
-        }
       }
       // !! deliberately fall through to next state to start displaying
       
@@ -233,7 +216,7 @@ uint8_t scrollDataSource(uint8_t dev, MD_MAX72XX::transformType_t t)
 
 void scrollText(void)
 {
-  static uint32_t                        prevTime = 0;
+  static uint32_t prevTime = 0;
   // Is it time to scroll the text?
   if (millis()-prevTime >= SCROLL_DELAY)
   {
@@ -296,13 +279,31 @@ void setup()
   {
     ; // wait for serial port to connect. Needed for native USB port only
   }
-  
-  WiFi.begin(ssid, password);
-  connectToWiFi();
 
-  client.setCallback(handleNewMessage);
+  WiFi.begin(ssid, password);
+  while (WiFi.status() != WL_CONNECTED) 
+  {
+    delay(500);
+    Serial.println("Connecting to WiFi..");
+  }
+  Serial.println("Connected to the WiFi network");
+  
   client.setServer(mqttServer, mqttPort);
-  connectToClient();
+  client.setCallback(handleNewMessage);
+  while (!client.connected()) 
+  {
+    Serial.println("Connecting to MQTT...");
+    if (client.connect("Niclas LED Display 1", mqttUser, mqttPassword )) 
+    {
+      Serial.println("MQTT connected");  
+    } 
+    else
+    {
+      Serial.print("failed with state: ");
+      Serial.println(client.state());
+      delay(2000);
+    }
+  }
  
   client.subscribe("niwe/display_1");
   client.subscribe("niwe/display_2");
@@ -313,7 +314,7 @@ void setup()
   strcpy(display_3, " ");
   strcpy(curMessage, display_1);
   changeMessages(); // Initiate first message
-  newMessage[0] = '\0';
+//  newMessage[0] = '\0';
 
   mx.begin();
   mx.setShiftDataInCallback(scrollDataSource);
@@ -326,19 +327,15 @@ void setup()
 int count = 0;
 void loop()
 {
-//  changeMessages();
   client.loop();
-  readSerial();
   scrollText();
   count++;
-  //Serial.println(count);
-  if (count == 300000) 
+  if (count == 500000) 
   {
-//    Serial.print("count\n");
     connectToWiFi();
     count = 0;
   }
-  if (count == 150000)
+  if (count == 250000)
   {
     connectToClient();
   }
