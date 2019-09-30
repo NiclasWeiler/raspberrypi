@@ -19,14 +19,7 @@
 // ****************************************************************
 #include <ESP8266WiFi.h>
 #include <PubSubClient.h>
-
-const char* ssid = "XXX";
-const char* password =  "XXX";
-
-const char* mqttServer = "XXX";
-const int   mqttPort = 999;
-const char* mqttUser = "XXX";
-const char* mqttPassword = "XXX";
+#include "C:\Users\weile\OneDrive\Dokument\Arduino\personal_info.h"
 
 // *****************************************************************
 
@@ -64,6 +57,7 @@ MD_MAX72XX mx = MD_MAX72XX(HARDWARE_TYPE, CS_PIN, MAX_DEVICES);
 #define CHAR_SPACING  1 // pixels between characters
 
 // Global message buffers shared by Serial and Scrolling functions
+// Size of string that is displayed
 #define BUF_SIZE  75
 char curMessage[BUF_SIZE];
 
@@ -72,12 +66,16 @@ bool changeMessageAvailable = false;
 int change = 1;
 int topicNr = 0;
 
-char display_1[BUF_SIZE];
-char display_2[BUF_SIZE];
-char display_3[BUF_SIZE];
+char display_1[BUF_SIZE] = " ";     // IOT message buffer 1
+char display_2[BUF_SIZE] = " ";     // IOT message buffer 2
+char display_3[BUF_SIZE] = " ";     // IOT message buffer 3
+char alarm_display[BUF_SIZE] = " "; // Alarm messages
+char WiFi_display[BUF_SIZE] = " ";  // Only internal error messages
+char MQTT_display[BUF_SIZE] = " ";  // Only internal error messages
 
 WiFiClient espClient;
-bool lostWiFi = false;
+int wiFiIndicator = 9;  // Indicates which WiFi in the wiFiList is active (9 indicates not known)
+int mqttIndicator = 0;  // Indicates which mqtt server in the "mqttServerList" is active
 PubSubClient client(espClient);
 
 /* This function check if connected to wifi. If it is not connecte, it ties to connect.
@@ -87,47 +85,53 @@ void connectToWiFi(void)
 {
   if (WiFi.status() != WL_CONNECTED) 
   {
-    lostWiFi = true;
-    Serial.println(" Not connected to the WiFi network");
-    strcpy(display_2, "2: No WiFi connection \0");
-    WiFi.begin(ssid, password);
+    if (wiFiIndicator == 9)  // If indicator undifined then set to 0.
+    {
+      wiFiIndicator = -1;
+    }
+    wiFiIndicator++;
+    wiFiIndicator = wiFiIndicator % nrOfWiFi;
+    Serial.println("Connecting to WiFi: " + String(wiFiIndicator+1) + " .........");
+    strcpy(WiFi_display, "No WiFi connection           \0");
+    WiFi.begin(wiFiList[wiFiIndicator].ssid, wiFiList[wiFiIndicator].password);
   }
   else
   {
-    Serial.println("Connected to the WiFi network");
-    if (lostWiFi)
-    {
-      strcpy(display_2, "2: WiFi reconnected \0");
-      lostWiFi = false;
-    }
+    strcpy(WiFi_display, " ");
+    Serial.println("Connected to WiFi: " + String(wiFiIndicator+1));
   }
 }
 
 void connectToClient(void)
 {
-  if ((!client.connected()) and (WiFi.status() == WL_CONNECTED)) 
+  if (!client.connected()) 
   {
-    Serial.println("Not connected to MQTT...");
-    strcpy(display_3, "3: No connection to MQTT server \0");
-    if (!client.connect("Niclas LED Display 1", mqttUser, mqttPassword )) 
+    if (WiFi.status() == WL_CONNECTED)
     {
-      Serial.print("failed with state: ");
-      Serial.println (client.state());
-    }
-    else
-    {
-      strcpy(display_3, "3: MQTT server reconnected \0");
-      client.subscribe("niwe/display_1");
-      client.subscribe("niwe/display_2");
-      client.subscribe("niwe/display_3");
+      Serial.println("Connecting to MQTT server: " + String(mqttIndicator+1));
+      Serial.println("Password: " + String(mqttServerList[mqttIndicator].password));
+      if (!client.connect("Niclas LED Display 1", mqttServerList[mqttIndicator].user, mqttServerList[mqttIndicator].password )) 
+      {
+        Serial.print("failed with state: ");
+        Serial.println (client.state());
+        strcpy(MQTT_display, "No connection to MQTT server            \0");
+        mqttIndicator++;
+        mqttIndicator = mqttIndicator % nrOfMqtt;
+        client.setServer(mqttServerList[mqttIndicator].serverAdress, mqttServerList[mqttIndicator].port);
+      }
+      else
+      {
+        strcpy(MQTT_display, " ");
+        client.subscribe("niwe/display_1");
+        client.subscribe("niwe/display_2");
+        client.subscribe("niwe/display_3");
+        client.subscribe("niwe/alarm_display");
+      }
     }
   }
   else
   {
-    if (client.connected())
-    {
       Serial.println("Connected to MQTT server");
-    }
   }
 }
 
@@ -147,6 +151,21 @@ void changeMessages(void)
       break;
     case 2:
       strcpy(changeMessage, display_3);
+      changeMessageAvailable = true;
+      change++;
+      break;
+    case 3:
+      strcpy(changeMessage, alarm_display);
+      changeMessageAvailable = true;
+      change++;
+      break;
+    case 4:
+      strcpy(changeMessage, WiFi_display);
+      changeMessageAvailable = true;
+      change++;
+      break;
+    case 5:
+      strcpy(changeMessage, MQTT_display);
       changeMessageAvailable = true;
       change=0;
       break;
@@ -248,6 +267,11 @@ void handleNewMessage(char* topic, byte* payload, unsigned int length)
     cp = display_3;
     number = '3';
   }
+    if (String(topic) == String("niwe/alarm"))
+  {
+    cp = alarm_display;
+    number = '4';
+  }
 
 /*  If Text not starts with space character, then copy tring.
  *  Otherwise copy nothing to create empty string, to shut the display down.
@@ -257,7 +281,7 @@ void handleNewMessage(char* topic, byte* payload, unsigned int length)
     // Check length of text and cut the lenght, if neccesary
     if (length > BUF_SIZE-5) // 5 Characters are added below for readability
     {
-      length = BUF_SIZE-5;
+      length = BUF_SIZE-4;
     }
     // Add text number and copy text
     *cp++ = number;
@@ -268,53 +292,22 @@ void handleNewMessage(char* topic, byte* payload, unsigned int length)
       *cp++ = (char)payload[i];
     }
   }
-  *cp++ = ' ';   // Always end string with a space and Null. Even empty string.
-  *cp++ = '\0';
+//  *cp++ = ' ';   
+  *cp++ = '\0'; // Always end string with Null. Even empty string.
 }
 
 void setup()
 {
   Serial.begin(9600);
-  while (!Serial)
-  {
-    ; // wait for serial port to connect. Needed for native USB port only
-  }
-
-  WiFi.begin(ssid, password);
-  while (WiFi.status() != WL_CONNECTED) 
-  {
-    delay(500);
-    Serial.println("Connecting to WiFi..");
-  }
-  Serial.println("Connected to the WiFi network");
+  delay(2000);
+  connectToWiFi();
   
-  client.setServer(mqttServer, mqttPort);
+  client.setServer(mqttServerList[mqttIndicator].serverAdress, mqttServerList[mqttIndicator].port);
   client.setCallback(handleNewMessage);
-  while (!client.connected()) 
-  {
-    Serial.println("Connecting to MQTT...");
-    if (client.connect("Niclas LED Display 1", mqttUser, mqttPassword )) 
-    {
-      Serial.println("MQTT connected");  
-    } 
-    else
-    {
-      Serial.print("failed with state: ");
-      Serial.println(client.state());
-      delay(2000);
-    }
-  }
- 
-  client.subscribe("niwe/display_1");
-  client.subscribe("niwe/display_2");
-  client.subscribe("niwe/display_3");
-
-  strcpy(display_1, "No messages           ");
-  strcpy(display_2, " ");
-  strcpy(display_3, " ");
+  connectToClient();
+  
   strcpy(curMessage, display_1);
   changeMessages(); // Initiate first message
-//  newMessage[0] = '\0';
 
   mx.begin();
   mx.setShiftDataInCallback(scrollDataSource);
