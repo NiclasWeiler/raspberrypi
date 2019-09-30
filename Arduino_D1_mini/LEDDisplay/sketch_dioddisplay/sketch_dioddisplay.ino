@@ -59,10 +59,9 @@ MD_MAX72XX mx = MD_MAX72XX(HARDWARE_TYPE, CS_PIN, MAX_DEVICES);
 // Global message buffers shared by Serial and Scrolling functions
 // Size of string that is displayed
 #define BUF_SIZE  75
-char curMessage[BUF_SIZE];
+char curMessage[BUF_SIZE] = " \0";
 
-char changeMessage[BUF_SIZE];
-bool changeMessageAvailable = false;
+char changeMessage[BUF_SIZE] = " \0";
 int change = 1;
 int topicNr = 0;
 
@@ -75,7 +74,7 @@ char MQTT_display[BUF_SIZE] = " ";  // Only internal error messages
 
 WiFiClient espClient;
 int wiFiIndicator = 9;  // Indicates which WiFi in the wiFiList is active (9 indicates not known)
-int mqttIndicator = 0;  // Indicates which mqtt server in the "mqttServerList" is active
+int mqttIndicator = -1;  // Indicates which mqtt server in the "mqttServerList" is active
 PubSubClient client(espClient);
 
 /* This function check if connected to wifi. If it is not connecte, it ties to connect.
@@ -108,16 +107,15 @@ void connectToClient(void)
   {
     if (WiFi.status() == WL_CONNECTED)
     {
+      mqttIndicator++;
+      mqttIndicator = mqttIndicator % nrOfMqtt;
       Serial.println("Connecting to MQTT server: " + String(mqttIndicator+1));
-      Serial.println("Password: " + String(mqttServerList[mqttIndicator].password));
+      client.setServer(mqttServerList[mqttIndicator].serverAdress, mqttServerList[mqttIndicator].port);
       if (!client.connect("Niclas LED Display 1", mqttServerList[mqttIndicator].user, mqttServerList[mqttIndicator].password )) 
       {
         Serial.print("failed with state: ");
         Serial.println (client.state());
         strcpy(MQTT_display, "No connection to MQTT server            \0");
-        mqttIndicator++;
-        mqttIndicator = mqttIndicator % nrOfMqtt;
-        client.setServer(mqttServerList[mqttIndicator].serverAdress, mqttServerList[mqttIndicator].port);
       }
       else
       {
@@ -131,7 +129,7 @@ void connectToClient(void)
   }
   else
   {
-      Serial.println("Connected to MQTT server");
+      Serial.println("Connected to MQTT server: " + String(mqttIndicator+1));
   }
 }
 
@@ -141,32 +139,26 @@ void changeMessages(void)
   {
     case 0:
       strcpy(changeMessage, display_1);
-      changeMessageAvailable = true;
       change++;
       break;
     case 1:  
       strcpy(changeMessage, display_2);
-      changeMessageAvailable = true;
       change++;
       break;
     case 2:
       strcpy(changeMessage, display_3);
-      changeMessageAvailable = true;
       change++;
       break;
     case 3:
       strcpy(changeMessage, alarm_display);
-      changeMessageAvailable = true;
       change++;
       break;
     case 4:
       strcpy(changeMessage, WiFi_display);
-      changeMessageAvailable = true;
       change++;
       break;
     case 5:
       strcpy(changeMessage, MQTT_display);
-      changeMessageAvailable = true;
       change=0;
       break;
   }
@@ -204,11 +196,9 @@ uint8_t scrollDataSource(uint8_t dev, MD_MAX72XX::transformType_t t)
       if (*p == '\0')
       {
         p = curMessage;     // reset the pointer to start of message
-        if (changeMessageAvailable)  // there is a new message waiting
-        {
-          strcpy(curMessage, changeMessage);  // copy it in
-          changeMessages();  // update to next message
-        }
+        // Change display message  
+        strcpy(curMessage, changeMessage);  // copy it in
+        changeMessages();  // update to next message
       }
       // !! deliberately fall through to next state to start displaying
       
@@ -302,12 +292,8 @@ void setup()
   delay(2000);
   connectToWiFi();
   
-  client.setServer(mqttServerList[mqttIndicator].serverAdress, mqttServerList[mqttIndicator].port);
   client.setCallback(handleNewMessage);
   connectToClient();
-  
-  strcpy(curMessage, display_1);
-  changeMessages(); // Initiate first message
 
   mx.begin();
   mx.setShiftDataInCallback(scrollDataSource);
