@@ -1,21 +1,8 @@
 // Use the MD_MAX72XX library to scroll text on the display   ( skrivit av majicDesign  använd MD_PAROLA
-//
-// Demonstrates the use of the callback function to control what
-// is scrolled on the display text.
-//
-// User can enter text on the serial monitor and this will display as a
-// scrolling message on the display.
-
-// PIR detector
-// http://henrysbench.capnfatz.com/henrys-bench/arduino-sensors-and-input/arduino-hc-sr501-motion-sensor-tutorial/
-//
-// This version tries to used the PIR but does not work
-//#include "Arduino.h"
 
 #include <MD_MAX72xx.h>
 #include <SPI.h>
 
-// Added for MQTT by Niclas
 // ****************************************************************
 #include <ESP8266WiFi.h>
 #include <PubSubClient.h>
@@ -23,36 +10,19 @@
 
 // *****************************************************************
 
-#define PRINT_CALLBACK  0
 #define PRINT(s, v) { Serial.print(F(s)); Serial.print(v); }
-
-
-// Define the number of devices we have in the chain and the hardware interface
-// NOTE: These pin numbers will probably not work with your hardware and may
-// need to be adapted
-//#define HARDWARE_TYPE MD_MAX72XX::PAROLA_HW
 
 #define HARDWARE_TYPE MD_MAX72XX::FC16_HW
 #define MAX_DEVICES 8 // 4
 #define CLK_PIN     D5 //   green
 #define DATA_PIN    D7 //   orange
 #define CS_PIN      D6 //   yellow
-                 // VCC 5V, brown
-                 // Ground, red
-//#define SUMMER_PIN  D0
-//#define PIR_PIN     D1
-//#define IR_RECV_PIN D4
-//#define IR_SEND_PIN D3
-//#define TEMP_PIN    D2
 #define HW_RST_PIN  D8   // Currently not taken out in the HW design
 
 // SPI hardware interface
 MD_MAX72XX mx = MD_MAX72XX(HARDWARE_TYPE, CS_PIN, MAX_DEVICES);
-// Arbitrary pins
-//MD_MAX72XX mx = MD_MAX72XX(HARDWARE_TYPE, DATA_PIN, CLK_PIN, CS_PIN, MAX_DEVICES);
 
 // Scrolling parameters
-
 #define SCROLL_DELAY  40 //75  // in milliseconds
 #define CHAR_SPACING  1 // pixels between characters
 
@@ -77,13 +47,14 @@ int wiFiIndicator = 9;  // Indicates which WiFi in the wiFiList is active (9 ind
 int mqttIndicator = -1;  // Indicates which mqtt server in the "mqttServerList" is active
 PubSubClient client(espClient);
 
-/* This function check if connected to wifi. If it is not connecte, it ties to connect.
- * If connection does not work A message is added to the display and loop is stopped.
+/* This function check if connected to wifi. If it is not connected, it tries to connect.
+ * If connection does not work, A message is added to the display and next WiFi network is tried.
  */
 void connectToWiFi(void)
 {
   if (WiFi.status() != WL_CONNECTED) 
   {
+    strcpy(WiFi_display, "No WiFi connection           \0");
     if (wiFiIndicator == 9)  // If indicator undifined then set to 0.
     {
       wiFiIndicator = -1;
@@ -91,7 +62,6 @@ void connectToWiFi(void)
     wiFiIndicator++;
     wiFiIndicator = wiFiIndicator % nrOfWiFi;
     Serial.println("Connecting to WiFi: " + String(wiFiIndicator+1) + " .........");
-    strcpy(WiFi_display, "No WiFi connection           \0");
     WiFi.begin(wiFiList[wiFiIndicator].ssid, wiFiList[wiFiIndicator].password);
   }
   else
