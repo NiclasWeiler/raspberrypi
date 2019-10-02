@@ -1,6 +1,7 @@
 // Use the MD_MAX72XX library to scroll text on the display   ( skrivit av majicDesign  använd MD_PAROLA
 
 #include <MD_MAX72xx.h>
+#include <MD_Parola.h>
 #include <SPI.h>
 
 // ****************************************************************
@@ -20,11 +21,16 @@
 #define HW_RST_PIN  D8   // Currently not taken out in the HW design
 
 // SPI hardware interface
-MD_MAX72XX mx = MD_MAX72XX(HARDWARE_TYPE, CS_PIN, MAX_DEVICES);
+MD_Parola parola = MD_Parola(HARDWARE_TYPE, CS_PIN, MAX_DEVICES);
 
 // Scrolling parameters
-#define SCROLL_DELAY  40 //75  // in milliseconds
-#define CHAR_SPACING  1 // pixels between characters
+#define MESSAGE_SCROLL_DELAY  2000 // in milliseconds
+
+// Used for Parola
+textPosition_t scrollAlign = PA_LEFT;
+uint8_t scrollSpeed = 25;
+uint16_t scrollPause = 0; // in milliseconds
+textEffect_t scrollEffect = PA_SCROLL_LEFT;
 
 // Global message buffers shared by Serial and Scrolling functions
 // Size of string that is displayed
@@ -32,9 +38,10 @@ MD_MAX72XX mx = MD_MAX72XX(HARDWARE_TYPE, CS_PIN, MAX_DEVICES);
 char curMessage[BUF_SIZE] = " \0";
 
 char changeMessage[BUF_SIZE] = " \0";
-int change = 1;
+int change = 0;
 int topicNr = 0;
 
+int  nrOfDisplays = 6;
 char display_1[BUF_SIZE] = " ";     // IOT message buffer 1
 char display_2[BUF_SIZE] = " ";     // IOT message buffer 2
 char display_3[BUF_SIZE] = " ";     // IOT message buffer 3
@@ -105,111 +112,102 @@ void connectToClient(void)
 
 void changeMessages(void)
 {
-  switch(change)
+  bool changed = false;
+  for (int i = 0; i < nrOfDisplays ; i++)
   {
-    case 0:
-      strcpy(changeMessage, display_1);
-      change++;
+    //Serial.println("Checking text buffer " + String(change));
+    switch(change)
+    {
+      case 0:
+        if (!(display_1[0] == ' '))
+        {
+          strcpy(changeMessage, display_1);
+          changed = true;
+        }
+        change++;
+        break;
+      case 1:  
+        if (!(display_2[0] == ' '))
+        {
+          strcpy(changeMessage, display_2);
+          changed = true;
+        }
+        change++;
+        break;
+      case 2:
+        if (!(display_3[0] == ' '))
+        {
+          strcpy(changeMessage, display_3);
+          changed = true;
+        }
+        change++;
+        break;
+      case 3:
+        if (!(alarm_display[0] == ' '))
+        {
+          strcpy(changeMessage, alarm_display);
+          changed = true;
+        }
+        change++;
+        break;
+      case 4:
+        if (!(WiFi_display[0] == ' '))
+        {
+          strcpy(changeMessage, WiFi_display);
+          changed = true;
+        }
+        change++;
+        break;
+      case 5:
+        if (!(MQTT_display[0] == ' '))
+        {
+          strcpy(changeMessage, MQTT_display);
+          changed = true;
+        }
+        change = 0;
+        break;
+    }
+    if (changed)
+    {
+      Serial.println("Displaying text buffer " + String(change) + ", text: " + String(changeMessage));
       break;
-    case 1:  
-      strcpy(changeMessage, display_2);
-      change++;
-      break;
-    case 2:
-      strcpy(changeMessage, display_3);
-      change++;
-      break;
-    case 3:
-      strcpy(changeMessage, alarm_display);
-      change++;
-      break;
-    case 4:
-      strcpy(changeMessage, WiFi_display);
-      change++;
-      break;
-    case 5:
-      strcpy(changeMessage, MQTT_display);
-      change=0;
-      break;
+    }
+  }
+  if (!changed) // If no messages found then display empty message
+  {
+    strcpy(changeMessage, " ");
   }
 }
 
-void scrollDataSink(uint8_t dev, MD_MAX72XX::transformType_t t, uint8_t col)
-// Callback function for data that is being scrolled off the display
-{
-#if PRINT_CALLBACK
-  Serial.print("\n cb ");
-  Serial.print(dev);
-  Serial.print(' ');
-  Serial.print(t);
-  Serial.print(' ');
-  Serial.println(col);
-#endif
-}
-uint8_t scrollDataSource(uint8_t dev, MD_MAX72XX::transformType_t t)
-// Callback function for data that is required for scrolling into the display
-{
-  static char   *p = curMessage;
-  static uint8_t  state = 0;
-  static uint8_t  curLen, showLen;
-  static uint8_t  cBuf[8];
-  uint8_t colData;
-  // finite state machine to control what we do on the callback
-  switch(state)
-  {
-    case 0: // Load the next character from the font table
-      showLen = mx.getChar(*p++, sizeof(cBuf)/sizeof(cBuf[0]), cBuf);
-      curLen = 0;
-      state++;
+/* This function will find next not empty message.
+ * The search for next message will only be done every MESSAGE_SCROLL_DELAY ms
+ * If all messages empty, then don't change message
+ */
 
-      // if we reached end of message, reset the message pointer
-      if (*p == '\0')
-      {
-        p = curMessage;     // reset the pointer to start of message
-        // Change display message  
-        strcpy(curMessage, changeMessage);  // copy it in
-        changeMessages();  // update to next message
-      }
-      // !! deliberately fall through to next state to start displaying
-      
-    case 1: // display the next part of the character
-      colData = cBuf[curLen++];
-      if (curLen == showLen)
-      {
-        showLen = CHAR_SPACING;
-        curLen = 0;
-        state = 2;
-      }
-      break;
-    case 2: // display inter-character spacing (blank column)
-      colData = 0;
-      if (curLen == showLen)
-        state = 0;
-      curLen++;
-      break;
-    default:
-      state = 0;
-  }
-  return(colData);
-}
-
-void scrollText(void)
+void scrollMessage(void)
 {
   static uint32_t prevTime = 0;
-  // Is it time to scroll the text?
-  if (millis()-prevTime >= SCROLL_DELAY)
+  if (parola.displayAnimate())
   {
-    mx.transform(MD_MAX72XX::TSL);  // scroll along - the callback will load all the data
-    prevTime = millis();      // starting point for next time
+    // Is it time to scroll the text?
+    if (millis()-prevTime >= MESSAGE_SCROLL_DELAY)
+    {
+      strcpy(curMessage, changeMessage);
+      changeMessages();
+      prevTime = millis();      // starting point for next time
+    }
+    parola.displayReset();
   }
 }
 
 void handleNewMessage(char* topic, byte* payload, unsigned int length)
 // Callback function for subscribed data from MQTT server
 {
-  static bool emptyString = false;
-  static char *cp;
-  static char number = 0;
+  char *cp;
+  char number = 0;
+  int strLength;
+
+  Serial.println(topic);
 
 // Find out wich string is to be updated.
   if (String(topic) == String("niwe/display_1"))
@@ -234,25 +232,29 @@ void handleNewMessage(char* topic, byte* payload, unsigned int length)
   }
 
 /*  If Text not starts with space character, then copy tring.
- *  Otherwise copy nothing to create empty string, to shut the display down.
+ *  Otherwise  add a space character (" ") to indicate empty string, to shut the display down.
  */
   if (!(String((char)payload[0]) == String(" ")))
   {
     // Check length of text and cut the lenght, if neccesary
     if (length > BUF_SIZE-5) // 5 Characters are added below for readability
     {
-      length = BUF_SIZE-5;
+      strLength = BUF_SIZE-5;
+    }
+    else
+    {
+      strLength = length;
     }
     // Add text number and copy text
     *cp++ = number;
     *cp++ = char(':');
     *cp++ = char(' ');
-    for (int i = 0; i < length ; i++)  // Add string
+    for (int i = 0; i < strLength ; i++)  // Add string
     {
       *cp++ = (char)payload[i];
     }
   }
-  *cp++ = ' ';   Add space to indicate empty text.
+  *cp++ = ' ';   
   *cp++ = '\0'; // Always end string with Null. Even empty string.
 }
 
@@ -264,20 +266,21 @@ void setup()
   
   client.setCallback(handleNewMessage);
   connectToClient();
-
-  mx.begin();
-  mx.setShiftDataInCallback(scrollDataSource);
-  mx.setShiftDataOutCallback(scrollDataSink);
+  //  parola.setIntensity(1);  // 0-15
+  //  parola.setSpeed(100); // speed in millisecs
+  //  parola.setCharSpacing();
+  parola.begin();
+  parola.displayText(curMessage, scrollAlign, scrollSpeed, scrollPause, scrollEffect, scrollEffect);
 
   // Test server
   // client.publish("niwe/display_1", "Hello from display_1");
-
 }
+
 int count = 0;
 void loop()
 {
   client.loop();
-  scrollText();
+  scrollMessage();
   count++;
   if (count == 500000) 
   {
