@@ -35,19 +35,32 @@ textEffect_t scrollEffect = PA_SCROLL_LEFT;
 // Global message buffers shared by Serial and Scrolling functions
 // Size of string that is displayed
 #define BUF_SIZE  75
+#define NR_OF_CHAN 6   // This is the number of different channels to be presented on the Display
+
+/*
+ * LED_chan[0]: Used for messages to/from family members
+ * LED_chan[1]: Used for messages to/from family members
+ * LED_chan[2]: Used for messages to/from family members
+ * LED_chan[3]: Used for alarms
+ * LED_chan[4]: Used for WiFi problems
+ * LED_chan[5]: Used for MQTT status
+ * 
+*/
+
+enum display_channel
+{
+  text_1,
+  text_2,
+  text_3,
+  alarms,
+  WiFi_status,
+  MQTT_status,    
+};
 char curMessage[BUF_SIZE] = " \0";
-
 char changeMessage[BUF_SIZE] = " \0";
-int change = 0;
+int displayInd = 0;
 int topicNr = 0;
-
-int  nrOfDisplays = 6;
-char display_1[BUF_SIZE] = " ";     // IOT message buffer 1
-char display_2[BUF_SIZE] = " ";     // IOT message buffer 2
-char display_3[BUF_SIZE] = " ";     // IOT message buffer 3
-char alarm_display[BUF_SIZE] = " "; // Alarm messages
-char WiFi_display[BUF_SIZE] = " ";  // Only internal error messages
-char MQTT_display[BUF_SIZE] = " ";  // Only internal error messages
+char LED_chan [NR_OF_CHAN][BUF_SIZE];
 
 WiFiClient espClient;
 int wiFiIndicator = 9;  // Indicates which WiFi in the wiFiList is active (9 indicates not known)
@@ -61,7 +74,7 @@ void connectToWiFi(void)
 {
   if (WiFi.status() != WL_CONNECTED) 
   {
-    strcpy(WiFi_display, "No WiFi connection           \0");
+    strcpy(LED_chan[WiFi_status], "No WiFi connection           \0");
     if (wiFiIndicator == 9)  // If indicator undifined then set to 0.
     {
       wiFiIndicator = -1;
@@ -73,7 +86,7 @@ void connectToWiFi(void)
   }
   else
   {
-    strcpy(WiFi_display, " ");
+    strcpy(LED_chan[WiFi_status], " ");
     Serial.println("Connected to WiFi: " + String(wiFiIndicator+1));
   }
 }
@@ -92,11 +105,11 @@ void connectToClient(void)
       {
         Serial.print("failed with state: ");
         Serial.println (client.state());
-        strcpy(MQTT_display, "No connection to MQTT server            \0");
+        strcpy(LED_chan[MQTT_status], "No connection to MQTT server            \0");
       }
       else
       {
-        strcpy(MQTT_display, " ");
+        strcpy(LED_chan[MQTT_status], " ");
         client.subscribe("niwe/display_1");
         client.subscribe("niwe/display_2");
         client.subscribe("niwe/display_3");
@@ -113,69 +126,24 @@ void connectToClient(void)
 void changeMessages(void)
 {
   bool changed = false;
-  for (int i = 0; i < nrOfDisplays ; i++)
+  for (int i = 0; i < NR_OF_CHAN-1 ; i++)    // Go through all text channels
   {
-    //Serial.println("Checking text buffer " + String(change));
-    switch(change)
+    Serial.println("Checking text channel " + String(displayInd +1));
+    if (!(LED_chan[displayInd][0] == ' ' ))     // if not empty string found
     {
-      case 0:
-        if (!(display_1[0] == ' '))
-        {
-          strcpy(changeMessage, display_1);
-          changed = true;
-        }
-        change++;
-        break;
-      case 1:  
-        if (!(display_2[0] == ' '))
-        {
-          strcpy(changeMessage, display_2);
-          changed = true;
-        }
-        change++;
-        break;
-      case 2:
-        if (!(display_3[0] == ' '))
-        {
-          strcpy(changeMessage, display_3);
-          changed = true;
-        }
-        change++;
-        break;
-      case 3:
-        if (!(alarm_display[0] == ' '))
-        {
-          strcpy(changeMessage, alarm_display);
-          changed = true;
-        }
-        change++;
-        break;
-      case 4:
-        if (!(WiFi_display[0] == ' '))
-        {
-          strcpy(changeMessage, WiFi_display);
-          changed = true;
-        }
-        change++;
-        break;
-      case 5:
-        if (!(MQTT_display[0] == ' '))
-        {
-          strcpy(changeMessage, MQTT_display);
-          changed = true;
-        }
-        change = 0;
-        break;
-    }
-    if (changed)
-    {
-      Serial.println("Displaying text buffer " + String(change) + ", text: " + String(changeMessage));
+      strcpy(changeMessage, LED_chan[displayInd]);
+      changed = true;
+      Serial.println("Displaying text channel " + String(displayInd + 1) + ", text: " + String(changeMessage));
+      displayInd++;
+      displayInd = displayInd % (NR_OF_CHAN-1);
       break;
     }
+    displayInd++;
+    displayInd = displayInd % (NR_OF_CHAN-1);
   }
-  if (!changed) // If no messages found then display empty message
+  if (!changed)  // No empty string found then show empty string
   {
-    strcpy(changeMessage, " ");
+    strcpy(changeMessage, " "); 
   }
 }
 
@@ -212,26 +180,26 @@ void handleNewMessage(char* topic, byte* payload, unsigned int length)
 // Find out wich string is to be updated.
   if (String(topic) == String("niwe/display_1"))
   {
-    cp = display_1;
+    cp = LED_chan[text_1];
     number = '1';
   }
   if (String(topic) == String("niwe/display_2"))
   {
-    cp = display_2;
+    cp = LED_chan[text_2];;
     number = '2';
   }
   if (String(topic) == String("niwe/display_3"))
   {
-    cp = display_3;
+    cp = LED_chan[text_3];;
     number = '3';
   }
     if (String(topic) == String("niwe/alarm"))
   {
-    cp = alarm_display;
+    cp = LED_chan[alarms];;
     number = '4';
   }
 
-/*  If Text not starts with space character, then copy tring.
+/*  If Text not starts with space character, then copy string.
  *  Otherwise  add a space character (" ") to indicate empty string, to shut the display down.
  */
   if (!(String((char)payload[0]) == String(" ")))
@@ -263,6 +231,11 @@ void setup()
   Serial.begin(9600);
   delay(2000);
   connectToWiFi();
+  
+  for (int i = 0; i < NR_OF_CHAN ; i++)    // Go through all text channels
+  {
+    LED_chan[i][0] = ' ';
+  }
   
   client.setCallback(handleNewMessage);
   connectToClient();
