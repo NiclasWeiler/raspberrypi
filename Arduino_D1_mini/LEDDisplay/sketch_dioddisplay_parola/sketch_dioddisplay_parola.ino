@@ -23,8 +23,10 @@
 // SPI hardware interface
 MD_Parola parola = MD_Parola(HARDWARE_TYPE, CS_PIN, MAX_DEVICES);
 
-// Scrolling parameters
-#define MESSAGE_SCROLL_DELAY  2000 // in milliseconds
+// Interval parameters
+#define MQTT_CHECK_INTERVAL  11000 // in milliseconds
+#define WIFI_CHECK_INTERVAL  10000 // in milliseconds
+#define MESSAGE_SCROLL_INTERVAL  2000 // in milliseconds
 
 // Used for Parola
 textPosition_t scrollAlign = PA_LEFT;
@@ -67,164 +69,11 @@ int wiFiIndicator = 9;  // Indicates which WiFi in the wiFiList is active (9 ind
 int mqttIndicator = -1;  // Indicates which mqtt server in the "mqttServerList" is active
 PubSubClient client(espClient);
 
-/* This function check if connected to wifi. If it is not connected, it tries to connect.
- * If connection does not work, A message is added to the display and next WiFi network is tried.
- */
-void connectToWiFi(void)
-{
-  if (WiFi.status() != WL_CONNECTED) 
-  {
-    strcpy(LED_chan[WiFi_status], "No WiFi connection           \0");
-    if (wiFiIndicator == 9)  // If indicator undifined then set to 0.
-    {
-      wiFiIndicator = -1;
-    }
-    wiFiIndicator++;
-    wiFiIndicator = wiFiIndicator % nrOfWiFi;
-    Serial.println("Connecting to WiFi: " + String(wiFiIndicator+1) + " .........");
-    WiFi.begin(wiFiList[wiFiIndicator].ssid, wiFiList[wiFiIndicator].password);
-  }
-  else
-  {
-    strcpy(LED_chan[WiFi_status], " ");
-    Serial.println("Connected to WiFi: " + String(wiFiIndicator+1));
-  }
-}
-
-void connectToClient(void)
-{
-  if (!client.connected()) 
-  {
-    if (WiFi.status() == WL_CONNECTED)
-    {
-      mqttIndicator++;
-      mqttIndicator = mqttIndicator % nrOfMqtt;
-      Serial.println("Connecting to MQTT server: " + String(mqttIndicator+1));
-      client.setServer(mqttServerList[mqttIndicator].serverAdress, mqttServerList[mqttIndicator].port);
-      if (!client.connect("Niclas LED Display 1", mqttServerList[mqttIndicator].user, mqttServerList[mqttIndicator].password )) 
-      {
-        Serial.print("failed with state: ");
-        Serial.println (client.state());
-        strcpy(LED_chan[MQTT_status], "No connection to MQTT server            \0");
-      }
-      else
-      {
-        strcpy(LED_chan[MQTT_status], " ");
-        client.subscribe("niwe/display_1");
-        client.subscribe("niwe/display_2");
-        client.subscribe("niwe/display_3");
-        client.subscribe("niwe/alarm_display");
-      }
-    }
-  }
-  else
-  {
-      Serial.println("Connected to MQTT server: " + String(mqttIndicator+1));
-  }
-}
-
-void changeMessages(void)
-{
-  bool changed = false;
-  for (int i = 0; i < NR_OF_CHAN-1 ; i++)    // Go through all text channels
-  {
-    Serial.println("Checking text channel " + String(displayInd +1));
-    if (!(LED_chan[displayInd][0] == ' ' ))     // if not empty string found
-    {
-      strcpy(changeMessage, LED_chan[displayInd]);
-      changed = true;
-      Serial.println("Displaying text channel " + String(displayInd + 1) + ", text: " + String(changeMessage));
-      displayInd++;
-      displayInd = displayInd % (NR_OF_CHAN-1);
-      break;
-    }
-    displayInd++;
-    displayInd = displayInd % (NR_OF_CHAN-1);
-  }
-  if (!changed)  // No empty string found then show empty string
-  {
-    strcpy(changeMessage, " "); 
-  }
-}
-
-/* This function will find next not empty message.
- * The search for next message will only be done every MESSAGE_SCROLL_DELAY ms
- * If all messages empty, then don't change message
- */
-
-void scrollMessage(void)
-{
-  static uint32_t prevTime = 0;
-  if (parola.displayAnimate())
-  {
-    // Is it time to scroll the text?
-    if (millis()-prevTime >= MESSAGE_SCROLL_DELAY)
-    {
-      strcpy(curMessage, changeMessage);
-      changeMessages();
-      prevTime = millis();      // starting point for next time
-    }
-    parola.displayReset();
-  }
-}
-
-void handleNewMessage(char* topic, byte* payload, unsigned int length)
-// Callback function for subscribed data from MQTT server
-{
-  char *cp;
-  char number = 0;
-  int strLength;
-
-  Serial.println(topic);
-
-// Find out wich string is to be updated.
-  if (String(topic) == String("niwe/display_1"))
-  {
-    cp = LED_chan[text_1];
-    number = '1';
-  }
-  if (String(topic) == String("niwe/display_2"))
-  {
-    cp = LED_chan[text_2];;
-    number = '2';
-  }
-  if (String(topic) == String("niwe/display_3"))
-  {
-    cp = LED_chan[text_3];;
-    number = '3';
-  }
-    if (String(topic) == String("niwe/alarm"))
-  {
-    cp = LED_chan[alarms];;
-    number = '4';
-  }
-
-/*  If Text not starts with space character, then copy string.
- *  Otherwise  add a space character (" ") to indicate empty string, to shut the display down.
- */
-  if (!(String((char)payload[0]) == String(" ")))
-  {
-    // Check length of text and cut the lenght, if neccesary
-    if (length > BUF_SIZE-5) // 5 Characters are added below for readability
-    {
-      strLength = BUF_SIZE-5;
-    }
-    else
-    {
-      strLength = length;
-    }
-    // Add text number and copy text
-    *cp++ = number;
-    *cp++ = char(':');
-    *cp++ = char(' ');
-    for (int i = 0; i < strLength ; i++)  // Add string
-    {
-      *cp++ = (char)payload[i];
-    }
-  }
-  *cp++ = ' ';   
-  *cp++ = '\0'; // Always end string with Null. Even empty string.
-}
+//void scrollMessage(void);
+//void handleNewMessage(char* topic, byte* payload, unsigned int length);
+//void changeMessages(void);
+//void connectToClient(void);
+//void connectToWiFi(void);
 
 void setup()
 {
@@ -249,19 +98,10 @@ void setup()
   // client.publish("niwe/display_1", "Hello from display_1");
 }
 
-int count = 0;
 void loop()
 {
   client.loop();
   scrollMessage();
-  count++;
-  if (count == 500000) 
-  {
-    connectToWiFi();
-    count = 0;
-  }
-  if (count == 250000)
-  {
-    connectToClient();
-  }
+  connectToWiFi();
+  connectToClient();
 }
