@@ -1,18 +1,32 @@
 // Use the MD_MAX72XX library to scroll text on the display   ( skrivit av majicDesign  använd MD_PAROLA
 
-#include <MD_MAX72xx.h>
-#include <MD_Parola.h>
+// *********** Serial Peripheral Interface **************************
 #include <SPI.h>
+#define PRINT(s, v) { Serial.print(F(s)); Serial.print(v); }
+//*******************************************************************
 
-// ****************************************************************
-#include <ESP8266WiFi.h>
-#include <PubSubClient.h>
+// Personal file with information of MQTT server and WiFi, including adresses and passwords
 #include "C:\Users\weile\OneDrive\Dokument\Arduino\personal_info.h"
 
-// *****************************************************************
+//  ********************* Used for WiFi ****************************
+#include <ESP8266WiFi.h>
+WiFiClient espClient;
+#define WIFI_CHECK_INTERVAL  10000 // in milliseconds
+int wiFiIndicator = 9;  // Indicates which WiFi in the wiFiList is active (9 indicates not known)
 
-#define PRINT(s, v) { Serial.print(F(s)); Serial.print(v); }
+//******************************************************************
 
+// ***************** Used for MQTT server **************************
+#include <PubSubClient.h>
+PubSubClient client(espClient);
+#define MQTT_CHECK_INTERVAL  11000 // in milliseconds
+int mqttIndicator = -1;  // Indicates which mqtt server in the "mqttServerList" is active
+//*******************************************************************
+
+
+//******************** Used for Parola and Display  ***************
+#include <MD_MAX72xx.h>
+#include <MD_Parola.h>
 #define HARDWARE_TYPE MD_MAX72XX::FC16_HW
 #define MAX_DEVICES 8 // 4
 #define CLK_PIN     D5 //   green
@@ -20,19 +34,12 @@
 #define CS_PIN      D6 //   yellow
 #define HW_RST_PIN  D8   // Currently not taken out in the HW design
 
-// SPI hardware interface
 MD_Parola parola = MD_Parola(HARDWARE_TYPE, CS_PIN, MAX_DEVICES);
-
-// Interval parameters
-#define MQTT_CHECK_INTERVAL  11000 // in milliseconds
-#define WIFI_CHECK_INTERVAL  10000 // in milliseconds
-#define MESSAGE_SCROLL_INTERVAL  2000 // in milliseconds
-
-// Used for Parola
 textPosition_t scrollAlign = PA_LEFT;
 uint8_t scrollSpeed = 25;
 uint16_t scrollPause = 0; // in milliseconds
 textEffect_t scrollEffect = PA_SCROLL_LEFT;
+#define MESSAGE_SCROLL_INTERVAL  2000 // in milliseconds
 
 // Global message buffers shared by Serial and Scrolling functions
 // Size of string that is displayed
@@ -48,7 +55,6 @@ textEffect_t scrollEffect = PA_SCROLL_LEFT;
  * LED_chan[5]: Used for MQTT status
  * 
 */
-
 enum display_channel
 {
   text_1,
@@ -58,27 +64,21 @@ enum display_channel
   WiFi_status,
   MQTT_status,    
 };
+
 char curMessage[BUF_SIZE] = " \0";
 char changeMessage[BUF_SIZE] = " \0";
-int displayInd = 0;
+int ledChannelInd = 0;
 int topicNr = 0;
-char LED_chan [NR_OF_CHAN][BUF_SIZE];
+char LED_chan[NR_OF_CHAN][BUF_SIZE];
 
-WiFiClient espClient;
-int wiFiIndicator = 9;  // Indicates which WiFi in the wiFiList is active (9 indicates not known)
-int mqttIndicator = -1;  // Indicates which mqtt server in the "mqttServerList" is active
-PubSubClient client(espClient);
+//******************************************************************
 
-//void scrollMessage(void);
-//void handleNewMessage(char* topic, byte* payload, unsigned int length);
-//void changeMessages(void);
-//void connectToClient(void);
-//void connectToWiFi(void);
 
 void setup()
 {
   Serial.begin(9600);
   delay(2000);
+
   connectToWiFi();
   
   for (int i = 0; i < NR_OF_CHAN ; i++)    // Go through all text channels
@@ -88,10 +88,11 @@ void setup()
   
   client.setCallback(handleNewMessage);
   connectToClient();
-  //  parola.setIntensity(1);  // 0-15
+
   //  parola.setSpeed(100); // speed in millisecs
   //  parola.setCharSpacing();
   parola.begin();
+  parola.setIntensity(0);  // 0-15
   parola.displayText(curMessage, scrollAlign, scrollSpeed, scrollPause, scrollEffect, scrollEffect);
 
   // Test server

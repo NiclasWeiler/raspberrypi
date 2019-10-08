@@ -3,18 +3,18 @@ void changeMessages(void)
   bool changed = false;
   for (int i = 0; i < NR_OF_CHAN-1 ; i++)    // Go through all text channels
   {
-    Serial.println("Checking text channel " + String(displayInd +1));
-    if (!(LED_chan[displayInd][0] == ' ' ))     // if not empty string found
+    Serial.println("Checking text channel " + String(ledChannelInd +1));
+    if (!(LED_chan[ledChannelInd][0] == ' ' ))     // if not empty string found
     {
-      strcpy(changeMessage, LED_chan[displayInd]);
+      strcpy(changeMessage, LED_chan[ledChannelInd]);
       changed = true;
-      Serial.println("Displaying text channel " + String(displayInd + 1) + ", text: " + String(changeMessage));
-      displayInd++;
-      displayInd = displayInd % (NR_OF_CHAN-1);
+      Serial.println("Displaying text channel " + String(ledChannelInd + 1) + ", text: " + String(changeMessage));
+      ledChannelInd++;
+      ledChannelInd = ledChannelInd % (NR_OF_CHAN-1);
       break;
     }
-    displayInd++;
-    displayInd = displayInd % (NR_OF_CHAN-1);
+    ledChannelInd++;
+    ledChannelInd = ledChannelInd % (NR_OF_CHAN-1);
   }
   if (!changed)  // No empty string found then show empty string
   {
@@ -50,7 +50,7 @@ void handleNewMessage(char* topic, byte* payload, unsigned int length)
   char number = 0;
   int strLength;
 
-  Serial.println(topic);
+  Serial.println("Change in channel " + String(topic) + " received");
 
 // Find out wich string is to be updated.
   if (String(topic) == String("niwe/display_1"))
@@ -94,7 +94,41 @@ void handleNewMessage(char* topic, byte* payload, unsigned int length)
     *cp++ = char(' ');
     for (int i = 0; i < strLength ; i++)  // Add string
     {
-      *cp++ = (char)payload[i];
+      Serial.println("payload: " + String(payload[i]));
+      if (payload[i] == 195)
+      {
+        switch(payload[i+1])
+        {
+          case 132:  // Ä
+            *cp++ = char(196);
+            i++;
+            break;
+          case 133:  // Å
+            *cp++ = char(197);
+            i++;
+            break;
+          case 150:  // Ö
+            *cp++ = char(214);
+            i++;
+            break;
+          case 164:  // ä
+            *cp++ = char(228);
+            i++;
+            break;
+          case 165:  // å
+            *cp++ = char(229);
+            i++;
+            break;
+          case 182:  // ö
+            *cp++ = char(246);
+            i++;
+            break;
+        }    
+      }
+      else
+      {
+        *cp++ = payload[i];  
+      }
     }
   }
   *cp++ = ' ';   
