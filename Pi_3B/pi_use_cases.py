@@ -21,6 +21,7 @@ import pi_sound_detector as sound
 import datetime
 import pi_record_video as rec
 import pi_stepmotor as stepMotor
+import mqtt_utility as mqtt
 
 
 def preparePiTemperatureMessage():
@@ -134,6 +135,12 @@ def move_camera(distance, direction):
   stepMotor.moveCamera(distance, direction)
   print ("Camera rotated  " + str(distance) + " sequencies to the " + direction)
 
+def sendMqttMessage():
+
+  channelStr = "niwe/alarm_display"
+  messageStr = "Alarm Test !!!!"
+  mqtt.sendMessage(channelStr, messageStr, True);
+
 def main(argv):
 
   useCase = argv[0]
@@ -167,6 +174,8 @@ def main(argv):
     record_video()
   elif useCase == 'moveCamera':
     move_camera(int(argv[1]), argv[2])
+  elif useCase == 'testMqtt':
+    sendMqttMessage()
   else:
     print ('erroneous input argument')
 

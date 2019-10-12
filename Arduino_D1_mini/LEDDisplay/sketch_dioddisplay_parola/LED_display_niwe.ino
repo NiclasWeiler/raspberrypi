@@ -68,7 +68,7 @@ void handleNewMessage(char* topic, byte* payload, unsigned int length)
     cp = LED_chan[text_3];;
     number = '3';
   }
-    if (String(topic) == String("niwe/alarm"))
+    if (String(topic) == String("niwe/alarm_display"))
   {
     cp = LED_chan[alarms];;
     number = '4';

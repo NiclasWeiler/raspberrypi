@@ -19,6 +19,7 @@ import datetime
 import os
 import mail_utility as mail
 import fill_data_utility as fill
+import mqtt_utility as mqtt
 
 count = 0
 totalCount = 0
@@ -37,6 +38,8 @@ def DETECTED(SOUND_PIN):
   totalCount += 1
   nowtime = datetime.datetime.now()
   nowInSec = time.time()
+  if dbg:
+    print("sound detected")
   if nowInSec - lastSoundDetectTime < 0.51:
     count += 1
   else:
@@ -57,8 +60,8 @@ def DETECTED(SOUND_PIN):
         #print (alarmDetectStr)
     logFile.close()
 
-  if dbg:
-    print (alarmMessage)
+    if dbg:
+      print (alarmMessage)
 
   lastSoundDetectTime = nowInSec
 
@@ -70,6 +73,7 @@ def DETECTED(SOUND_PIN):
       picName = "//home//pi//Pictures//" + nowtime_str + ".jpeg"
       fill.takePicture(picName)
       mail.sendAlarm(alarmMessage, picName)
+      mqtt.sendMessage("niwe/alarm_display", "Sound alarm, sommarstuga!!!!", True)
       #print ("Alarm")
     elif nrOfAlarms < 6:     # Send only alarm message (no attachment)
       mail.sendAlarm(alarmMessage, 'noAttach')
@@ -89,6 +93,8 @@ def soundcheck(debug):
 
   startTime = time.time()
   now = startTime
+  if dbg:
+    mqtt.sendMessage("niwe/alarm_display", "Starting sound check sommarstuga!", True)
 
   while (now - startTime < 3500):  # 3500 Time period for checking sound
     time.sleep(60)
