@@ -44,7 +44,7 @@ textEffect_t scrollEffect = PA_SCROLL_LEFT;
 // Global message buffers shared by Serial and Scrolling functions
 // Size of string that is displayed
 #define BUF_SIZE  75
-#define NR_OF_CHAN 6   // This is the number of different channels to be presented on the Display
+//#define NR_OF_CHAN 7   // This is the number of different channels to be presented on the Display
 
 /*
  * LED_chan[0]: Used for messages to/from family members
@@ -55,14 +55,17 @@ textEffect_t scrollEffect = PA_SCROLL_LEFT;
  * LED_chan[5]: Used for MQTT status
  * 
 */
+
 enum display_channel
 {
   text_1,
   text_2,
   text_3,
+  text_4,
   alarms,
   WiFi_status,
-  MQTT_status,    
+  MQTT_status,
+  NR_OF_CHAN,    // This is the number of different channels to be presented on the Display
 };
 
 char curMessage[BUF_SIZE] = " \0";
@@ -72,7 +75,6 @@ int topicNr = 0;
 char LED_chan[NR_OF_CHAN][BUF_SIZE];
 
 //******************************************************************
-
 
 void setup()
 {
@@ -85,7 +87,15 @@ void setup()
   {
     LED_chan[i][0] = ' ';
   }
-  
+
+/*  Initiate messages for Demo/fake text
+  strcpy(LED_chan[0], "Niclas will arrive late. Please put the wine in fridge!!!! ");
+  strcpy(LED_chan[1], "Please peel the shrimps !!!!!!!!!");
+  strcpy(LED_chan[2], "I am at Selmas, Can we get take away suchi??");
+  strcpy(LED_chan[3], "The cottage alarm was triggered!");
+  strcpy(LED_chan[4], "Cottage Temp: 90 deg");
+*/
+
   client.setCallback(handleNewMessage);
   connectToClient();
 

@@ -95,8 +95,9 @@ void handleNewMessage(char* topic, byte* payload, unsigned int length)
     for (int i = 0; i < strLength ; i++)  // Add string
     {
       Serial.println("payload: " + String(payload[i]));
-      if (payload[i] == 195)
+      if (payload[i] == 195) // Incomming Swedish letters consists of two chars, first one is == 196 (decimal)
       {
+        //Check second char and add the corresponding ascii (for the parola ascii table) to the out string
         switch(payload[i+1])
         {
           case 132:  // Ä
