@@ -85,7 +85,7 @@ void setup()
   
   for (int i = 0; i < NR_OF_CHAN ; i++)    // Go through all text channels
   {
-    LED_chan[i][0] = ' ';
+    LED_chan[i][0] = ' '; //Add space character which indicates "No text to Display"
   }
 
 /*  Initiate messages for Demo/fake text
