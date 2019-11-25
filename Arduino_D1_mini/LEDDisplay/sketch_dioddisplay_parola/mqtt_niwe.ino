@@ -11,7 +11,7 @@ void connectToClient(void)
         mqttIndicator = mqttIndicator % nrOfMqtt;
         Serial.println("Connecting to MQTT server: " + String(mqttIndicator+1));
         client.setServer(mqttServerList[mqttIndicator].serverAdress, mqttServerList[mqttIndicator].port);
-        if (!client.connect("Niclas LED Display 1", mqttServerList[mqttIndicator].user, mqttServerList[mqttIndicator].password )) 
+        if (!client.connect("Niclas LED Blue Display", mqttServerList[mqttIndicator].user, mqttServerList[mqttIndicator].password )) 
         {
           Serial.print("failed with state: ");
           Serial.println (client.state());
@@ -23,6 +23,7 @@ void connectToClient(void)
           client.subscribe("niwe/display_1");
           client.subscribe("niwe/display_2");
           client.subscribe("niwe/display_3");
+          client.subscribe("niwe/blue_display");
           client.subscribe("niwe/alarm_display");
         }
       }
@@ -50,20 +51,25 @@ void handleNewMessage(char* topic, byte* payload, unsigned int length)
     cp = LED_chan[text_1];
     number = '1';
   }
-  if (String(topic) == String("niwe/display_2"))
+  else if (String(topic) == String("niwe/display_2"))
   {
     cp = LED_chan[text_2];;
     number = '2';
   }
-  if (String(topic) == String("niwe/display_3"))
+  else if (String(topic) == String("niwe/display_3"))
   {
     cp = LED_chan[text_3];;
     number = '3';
   }
-    if (String(topic) == String("niwe/alarm_display"))
+  else if (String(topic) == String("niwe/blue_display"))
+  {
+    cp = LED_chan[text_4];;
+    number = '4';
+  }
+  else if (String(topic) == String("niwe/alarm_display"))
   {
     cp = LED_chan[alarms];;
-    number = '4';
+    number = '5';
   }
 
 /*  If Text not starts with space character, then copy string.

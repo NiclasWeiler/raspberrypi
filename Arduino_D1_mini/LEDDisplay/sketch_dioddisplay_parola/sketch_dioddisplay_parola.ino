@@ -27,7 +27,9 @@ int mqttIndicator = -1;  // Indicates which mqtt server in the "mqttServerList" 
 //******************** Used for Parola and Display  ***************
 #include <MD_MAX72xx.h>
 #include <MD_Parola.h>
-#define HARDWARE_TYPE MD_MAX72XX::FC16_HW
+
+#define HARDWARE_TYPE MD_MAX72XX::FC16_HW // "FC16_HW" for blue led, "ICSTATION_HW" for red led.
+
 #define MAX_DEVICES 8 // 4
 #define CLK_PIN     D5 //   green
 #define DATA_PIN    D7 //   orange
@@ -39,12 +41,12 @@ textPosition_t scrollAlign = PA_LEFT;
 uint8_t scrollSpeed = 25;
 uint16_t scrollPause = 0; // in milliseconds
 textEffect_t scrollEffect = PA_SCROLL_LEFT;
+uint8_t displayIntensity = 3; // 0-15
 #define MESSAGE_SCROLL_INTERVAL  2000 // in milliseconds
 
 // Global message buffers shared by Serial and Scrolling functions
 // Size of string that is displayed
 #define BUF_SIZE  75
-//#define NR_OF_CHAN 7   // This is the number of different channels to be presented on the Display
 
 /*
  * LED_chan[0]: Used for messages to/from family members
@@ -58,13 +60,13 @@ textEffect_t scrollEffect = PA_SCROLL_LEFT;
 
 enum display_channel
 {
-  text_1,
-  text_2,
-  text_3,
-  text_4,
-  alarms,
-  WiFi_status,
-  MQTT_status,
+  text_1,        // Via MQTT
+  text_2,        // Via MQTT
+  text_3,        // Via MQTT
+  text_4,        // Via MQTT
+  alarms,        // Via MQTT
+  WiFi_status,   // Internal display
+  MQTT_status,   // Internal display
   NR_OF_CHAN,    // This is the number of different channels to be presented on the Display
 };
 
@@ -102,7 +104,7 @@ void setup()
   //  parola.setSpeed(100); // speed in millisecs
   //  parola.setCharSpacing();
   parola.begin();
-  parola.setIntensity(0);  // 0-15
+  parola.setIntensity(displayIntensity);
   parola.displayText(curMessage, scrollAlign, scrollSpeed, scrollPause, scrollEffect, scrollEffect);
 
   // Test server
