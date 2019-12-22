@@ -74,8 +74,8 @@ def DETECTED(SOUND_PIN):
       fill.takePicture(picName)
       mail.sendAlarm(alarmMessage, picName)
       mqtt.sendMessage("niwe/alarm_display", "Sound alarm, sommarstuga!!!!", True)
-      #print ("Alarm")
-    elif nrOfAlarms < 6:     # Send only alarm message (no attachment)
+      mqtt.sendMessage("niwe/alarm_display", "Sound alarm, sommarstuga!!!!", False)
+    elif nrOfAlarms < 6:     # Send only alarm message, without attachment
       mail.sendAlarm(alarmMessage, 'noAttach')
 
   return nowtime
@@ -93,8 +93,6 @@ def soundcheck(debug):
 
   startTime = time.time()
   now = startTime
-  if dbg:
-    mqtt.sendMessage("niwe/alarm_display", "Starting sound check sommarstuga!", True)
 
   while (now - startTime < 3500):  # 3500 Time period for checking sound
     time.sleep(60)

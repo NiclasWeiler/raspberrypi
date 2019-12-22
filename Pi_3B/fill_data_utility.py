@@ -15,6 +15,7 @@ import subprocess
 import time
 import mail_utility as mail
 import Adafruit_DHT
+import mqtt_utility as mqtt
 
 def getTempHumToFile(filename):
 
@@ -22,7 +23,7 @@ def getTempHumToFile(filename):
   localtime = time.asctime( time.localtime(time.time()) )
 
   #get humidity temperature
-  humidity, temperature = Adafruit_DHT.read_retry(Adafruit_DHT.DHT22, 17)
+  humidity, temperature = Adafruit_DHT.read_retry(Adafruit_DHT.DHT11, 17)
   if (type(1.2) != type(humidity)): # If no values received set values to 999
     humidity = 999
     temperature = 999
@@ -30,6 +31,9 @@ def getTempHumToFile(filename):
     if (checkAlarm(temperature, 40, 0)):
       mail.sendAlarm("Air temperatur Larm !!!!!!!!!!!!!!!!!!!!\n"
                       + "Air Temp = " + format(temperature, '.1f'), 'noAttach')
+      # Send Alarm to both local MQTT server and External MQTT server
+      mqtt.sendMessage("niwe/alarm_display", "Air Temperature alarm, sommarstuga!!!!", True)
+      mqtt.sendMessage("niwe/alarm_display", "Air Temperature alarm, sommarstuga!!!!", False)
 
   # Write data into file
   f = open(filename, 'a')
@@ -55,6 +59,9 @@ def getPiTempToFile(filename):
   if (checkAlarm(gpuTempValue, 60, 30)):
     mail.sendAlarm("Pi temperatur Larm !!!!!!!!!!!!!!!!!!!!\n"
                     + "GPU Temp = " + gpuTemp_str, 'noAttach')
+    # Send Alarm to both local MQTT server and External MQTT server
+    mqtt.sendMessage("niwe/alarm_display", "Pi Temperature alarm, sommarstuga!!!!", True)
+    mqtt.sendMessage("niwe/alarm_display", "Pi Temperature alarm, sommarstuga!!!!", False)
 
 
   #get CPU temperature
@@ -67,6 +74,8 @@ def getPiTempToFile(filename):
   if (checkAlarm(cpuTempValue, 60, 30)):
     mail.sendAlarm("Pi temperatur Larm !!!!!!!!!!!!!!!!!!!!\n"
                + "CPU Temp = " + str(cpuTempValue) + " C", 'noAttach')
+    mqtt.sendMessage("niwe/alarm_display", "Pi Temperature alarm, sommarstuga!!!!", True)
+    mqtt.sendMessage("niwe/alarm_display", "Pi Temperature alarm, sommarstuga!!!!", False)
 
   # Write data into file
   f = open(filename, 'a')

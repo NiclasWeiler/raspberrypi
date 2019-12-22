@@ -19,7 +19,7 @@ import os
 import paho.mqtt.client as mqtt
 
 localBroker_address = "192.168.8.100"
-extBroker_adress = "weilerhoka.hopto.org"
+extBroker_address = "weilervinter.hopto.org"
 
 def sendMessage(channelStr, messageStr, localMessage):
 
@@ -28,7 +28,7 @@ def sendMessage(channelStr, messageStr, localMessage):
   if (localMessage):
     mqttClient.connect(localBroker_address)
   else:
-    client.connect(extBroker_address, port=1883)
+    mqttClient.connect(extBroker_address, port=1883)
 
   mqttClient.publish(channelStr, messageStr)
   mqttClient.disconnect()
